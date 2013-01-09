@@ -1,4 +1,4 @@
-#########################################################################
+########################################################################
 # pynoted -- server
 #
 # The Server of the pynoter package. This class handles register and
@@ -38,7 +38,7 @@ class Server(Object):
         # clean up at the end
         pass
 
-    @method(dbus_interface='org.pynoter.server', in_signature='s',
+    @method(dbus_interface='org.pynoter.server', in_signature='sb',
             out_signature='s')
     def register(self, program_name, multi_client=False):
         """
@@ -73,7 +73,7 @@ class Server(Object):
             # otherwise take the program's name
             unique_name = program_name
 
-        handler = ClientHandler(self.bus, '/'+unique_name)
+        handler = ClientHandler(self.bus, unique_name)
 
         # save the handler instance
         self.programs[unique_name] = (handler,1)
