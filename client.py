@@ -1,4 +1,4 @@
-#########################################################################
+z########################################################################
 # pynoted -- client
 #
 # The client class of the pynoter package. This class will be the
@@ -12,21 +12,21 @@
 from dbus import SessionBus, Interface
 
 
-class Client():
-    def __init__(self, progam_name, object_path='/'):
+class Client(object):
+    def __init__(self, progam_name, object_path='/', multi_client = False):
         self.object_path = object_path
         # register on startup
-        self._register(progam_name, self.object_path)
+        self._register(progam_name, self.object_path, multi_client)
 
     def __del__(self):
         # unregister before quitting
         self._unregister(self.port_name, self.object_path)
 
-    def _register(self, client_name, object_path):
+    def _register(self, client_name, object_path, multi_client):
         # get connection to the server
         server = Interface(SessionBus().get_object('org.pynoter.server', object_path),
                            dbus_interface='org.pynoter.server')
-        self.port_name = server.register(client_name)
+        self.port_name = server.register(client_name, multi_client)
 
     def _unregister(self, client_name, object_path):
         server = Interface(SessionBus().get_object('org.pynoter.server', object_path),
