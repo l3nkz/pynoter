@@ -13,7 +13,7 @@ from dbus import SessionBus, Interface
 
 
 class Client(object):
-    def __init__(self, progam_name, object_path='/', multi_client = False):
+    def __init__(self, progam_name, object_path='/', multi_client=False):
         self.object_path = object_path
         # register on startup
         self._register(progam_name, self.object_path, multi_client)
@@ -24,18 +24,20 @@ class Client(object):
 
     def _register(self, client_name, object_path, multi_client):
         # get connection to the server
-        server = Interface(SessionBus().get_object('org.pynoter.server', object_path),
+        server = Interface(SessionBus().get_object('org.pynoter.server',
+                                                   object_path),
                            dbus_interface='org.pynoter.server')
         self.port_name = server.register(client_name, multi_client)
 
     def _unregister(self, client_name, object_path):
-        server = Interface(SessionBus().get_object('org.pynoter.server', object_path),
+        server = Interface(SessionBus().get_object('org.pynoter.server',
+                                                   object_path),
                            dbus_interface='org.pynoter.server')
         server.unregister(client_name)
 
     def send_message(self, subject, message, icon="",
                      timeout=6000, append=True, update=False):
-        handler = Interface(SessionBus().get_object('org.pynoter.listener', '/'+self.port_name),
+        handler = Interface(SessionBus().get_object('org.pynoter.listener',
+                                                    '/'+self.port_name),
                             dbus_interface='org.pynoter.listener')
         handler.send_message(subject, message, icon, timeout, append, update)
-
