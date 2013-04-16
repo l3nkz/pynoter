@@ -1,4 +1,4 @@
-Python Library for displaying Messages via libnotify
+Python Library for displaying messages via libnotify
 
 DESCRIPTION:
 This is a python library for displaying notifications. The name may be a little bit irritating.
@@ -7,7 +7,7 @@ appending and updating of notifications should be possible and the usage should 
 Therefor a server site and a client site was developed. The server manages the registering of
 clients as well as the receiving and displaying of the notifications. The client just establishes
 a connection to the server and transmits the messages which should be displayed. The communication
-between client and server is done via DBus and the notifications are displayed with the held of
+between client and server is done via DBus and the notifications are displayed with the help of
 the pynotify package.
 
 USAGE:
