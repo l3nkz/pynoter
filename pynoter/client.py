@@ -1,18 +1,21 @@
-########################################################################
+#!/usr/bin/env python3
+
+###############################################################################
 # pynoted -- client
 #
 # The client class of the pynoter package. This class will be the
 # connection between the user program and the pynoted server. It will
 # handle register and unregister command as well as sending messages.
 #
-# License: GPL2
-# Contact: till.smejkal@gmail.com
-#########################################################################
+# License: GPLv3
+#
+# (c) Till Smejkal - till.smejkal+pynoter@ossmail.de
+###############################################################################
 
 from dbus import SessionBus, Interface
 
 
-class Client(object):
+class Client:
     """
     This class should be used to establish connections to the server
     as well as sending messages to him.

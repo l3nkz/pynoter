@@ -1,0 +1,31 @@
+#!/usr/bin/env python3
+
+import logging
+from logging import StreamHandler
+
+from argparse import ArgumentParser
+
+from pynoter import Server
+
+
+if __name__ == "__main__":
+    # Initiate logging
+    logger = logging.getLogger('pynoter')
+    logger.addHandler(StreamHandler())
+
+    # Command line argument parsing
+    commands = ArgumentParser(description="Advanced Notification Daemon")
+    commands.add_argument("--debug", "-D", action="store_true", default=False,
+            dest="debug", help="Show debug information.")
+
+    parsed_args = commands.parse_args()
+
+    # Set options accordingly
+    if parsed_args.debug:
+        logger.setLevel(logging.DEBUG)
+    else:
+        logger.setLevel(logging.WARNING)
+
+    # Start the server
+    server = Server()
+    server.run()

@@ -1,23 +1,29 @@
-#########################################################################
+#!/usr/bin/env python3
+
+###############################################################################
 # pynoted -- message handler
 #
 # The message handler of the pynoter package. This class was designed to
 # correctly display the messages from all clients. The problem which
-# occured during the development of this library was that messages could
-# be lost of they aren't enqueued correctly. Therefore a worker thread was
+# occurred during the development of this library was that messages could
+# be lost if they aren't enqueued correctly. Therefore a worker thread was
 # designed to face this problem. This thread has a message queue and displays
 # the messages in the correct order and checks if everything shown the way
 # the user wants to see it.
 #
-# License: GPLv2
-# Contact: till.smejkal@gmail.com
-#########################################################################
+# License: GPLv3
+#
+# (c) Till Smejkal - till.smejkal+pynoter@ossmail.de
+###############################################################################
 
 from threading import Thread, Lock, Semaphore
 
 import time
 
-import _debug as debug
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 class MessageHandler(Thread):
@@ -46,33 +52,33 @@ class MessageHandler(Thread):
     client_handlers = 0
 
     def __init__(self):
-        debug.debug_msg("[MessageHandler]Initiate MessageHandler")
+        logger.debug("[MessageHandler]Initiate MessageHandler")
 
         Thread.__init__(self)
 
         MessageHandler.running = True
 
     def register(self):
-        debug.debug_msg("[MessageHandler]New ClientHandler registered")
+        logger.debug("[MessageHandler]New ClientHandler registered")
 
         # increase the number of client handlers which use this
         # MessageHandler handler
         MessageHandler.client_handlers += 1
 
     def unregister(self):
-        debug.debug_msg("[MessageHandler]ClientHandler unregistered")
+        logger.debug("[MessageHandler]ClientHandler unregistered")
 
         # decrease the number of client handlers which use this message handler
         MessageHandler.client_handlers -= 1
 
     def stop(self):
-        debug.debug_msg("[MessageHandler]Stopping MessageHandler Thread")
+        logger.debug("[MessageHandler]Stopping MessageHandler Thread")
 
         MessageHandler.running = False
         MessageHandler.wait_sem.release()
 
     def enqueue(self, client, message):
-        debug.debug_msg("[MessageHandler]Recieved new Message from %s"
+        logger.debug("[MessageHandler]Recieved new Message from %s"
                         % (client,))
 
         # enqueue a new message
@@ -83,25 +89,27 @@ class MessageHandler(Thread):
         if client == MessageHandler.active_client and\
            message.subject == MessageHandler.active_subject:
             # they are the same, so directly display this message
-            debug.debug_msg("[MessageHandler]Directly display message " +
-                            "S:%s M:%s from %s" % (message.subject,
-                                                   message.message, client))
+            logger.debug("[MessageHandler]Directly display message " +
+                    "S:%s M:%s from %s" % (message.subject, message.message,
+                        client))
             MessageHandler.active_lock.release()
             self._display(message)
         else:
             # otherwise enqueue the message
             MessageHandler.active_lock.release()
             MessageHandler.messages_lock.acquire()
-            debug.debug_msg("[MessageHandler]Append new message " +
-                            "S:%s M:%s from %s to queue[%i]"
-                            % (message.subject, message.message,
-                               client, len(MessageHandler.messages)))
+            logger.debug("[MessageHandler]Append new message " +
+                    "S:%s M:%s from %s to queue[%i]" % (message.subject,
+                        message.message, client, len(MessageHandler.messages)))
             MessageHandler.messages.append((client, message))
             MessageHandler.messages_lock.release()
+
+            # release the wait_sem semaphore to indicate that a new
+            # message was enqueued.
             MessageHandler.wait_sem.release()
 
     def run(self):
-        debug.debug_msg("[MessageHandler]Starting MessageHandler Thread")
+        logger.debug("[MessageHandler]Starting MessageHandler Thread")
 
         # run till no client handler uses this message handler any more
         while MessageHandler.running or len(MessageHandler.messages) > 0:
@@ -111,6 +119,8 @@ class MessageHandler(Thread):
             MessageHandler.wait_sem.acquire()
             if not MessageHandler.running and\
                len(MessageHandler.messages) <= 0:
+                # This check is needed, because the thread would try to display
+                # a message, which isn't there any more.
                 break
 
             # get the next program which should be displayed
@@ -146,11 +156,9 @@ class MessageHandler(Thread):
                     MessageHandler.wait_sem.acquire()
                     # remove the message from the queue
                     del MessageHandler.messages[i]
-                    debug.debug_msg("[MessageHandler]Display message " +
-                                    "S:%s M:%s from %s"
-                                    % (message.subject,
-                                       message.message,
-                                       client))
+                    logger.debug("[MessageHandler]Display message " +
+                            "S:%s M:%s from %s" % (message.subject,
+                                message.message, client))
 
                     # at the end display the message
                     self._display(message)
@@ -175,7 +183,7 @@ class MessageHandler(Thread):
 
             MessageHandler.timeout_lock.release()
 
-            # restore the active name to default
+            # reset the active name to default
             MessageHandler.active_lock.acquire()
             MessageHandler.active_client = None
             MessageHandler.active_subject = None
