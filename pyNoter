@@ -3,6 +3,8 @@
 import logging
 from logging import StreamHandler, Formatter
 
+import sys
+
 from argparse import ArgumentParser
 
 from pynoter import Server
@@ -20,13 +22,28 @@ if __name__ == "__main__":
 
     # Command line argument parsing.
     commands = ArgumentParser(description="Advanced Notification Daemon")
+
+    # Debugging output.
     commands.add_argument("--debug", "-D", action="store_true", default=False,
             dest="debug", help="Show debug information.")
 
+    # Use system bus instead of session bus.
+    commands.add_argument("--system", "-S", action="store_true", default=False,
+            dest="system", help="Use system bus instead of session bus.")
+
+    # Use a special bus suffix for the server.
+    commands.add_argument("--bus_suffix", "-B", action="store", default=None,
+            dest="bus_suffix", help="The suffix which should be added to the" +
+            " servers bus name.")
+
+    # Parse arguments
     parsed_args = commands.parse_args()
+    debug = parsed_args.debug
+    use_system = parsed_args.system
+    bus_suffix = parsed_args.bus_suffix
 
     # Set options accordingly.
-    if parsed_args.debug:
+    if debug:
         logger.setLevel(logging.DEBUG)
     else:
         logger.setLevel(logging.WARNING)
@@ -34,5 +51,10 @@ if __name__ == "__main__":
     # Start the server.
     logger.debug("Start server now.")
 
-    server = Server()
-    server.run()
+    try:
+        server = Server(bus_suffix=bus_suffix, use_system_bus=use_system)
+        server.run()
+    except Exception as e:
+        print(str(e))
+
+        sys.exit(1)
