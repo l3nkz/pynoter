@@ -14,6 +14,7 @@
 from dbus import SessionBus, SystemBus
 from dbus.service import Object, BusName, method
 from dbus.mainloop.glib import DBusGMainLoop
+from dbus.exceptions import NameExistsException
 
 import gi.repository.GLib as glib
 
@@ -32,16 +33,16 @@ class Server(Object):
     all the clients and controls everything.
     """
 
-    def __init__(self, object_path = '/', use_system_bus = False):
+    def __init__(self, bus_suffix = None, use_system_bus = False):
         """
         Constructor of the class. Within this method the DBus connection will
         be initiated as well as other setup.
 
-        :param object_path: The path where this server should be accessible.
-                            This is only necessary to change, if there are
-                            multiple pynoter server on the same DBus-Bus.
-                            (Defaults to '/')
-        :type object_path: str
+        :param bus_suffix: A suffix which should be added to the normal
+                           'org.pynoter' bus name. This is only necessary if
+                           there are multiple pynoter servers on the same
+                           DBus-Bus. (Defaults to None)
+        :type bus_suffix: str
         :param use_system_bus: Flag which indicates, that the server should use
                                the DBus system bus instead of the normal
                                session bus. This must be done if this server is
@@ -50,27 +51,38 @@ class Server(Object):
         :type use_system_bus: bool
         """
         # Initialize the DBus connection.
+
+        # Create the bus name.
+        if bus_suffix is None:
+            name = 'org.pynoter'
+        else:
+            name = 'org.pynoter.' + bus_suffix
+
+        # Determine which bus to use.
         if use_system_bus:
             self._dbus_bus = SystemBus(mainloop=DBusGMainLoop(set_as_default=True))
 
-            logger.debug(("Initiating DBus-system connection " +
-                "(path: {})").format(object_path)
-            )
+            logger.debug("Start server using system bus at {}.".format(name))
         else:
             self._dbus_bus = SessionBus(mainloop=DBusGMainLoop(set_as_default=True))
 
-            logger.debug(("Initiating DBus-session connection " +
-                "(path: {})").format(object_path)
-            )
+            logger.debug("Start server using session bus at {}.".format(name))
 
-        # Create the bus name.
-        bus_name = BusName('org.pynoter', bus=self._dbus_bus)
+        try:
+            bus_name = BusName(name, bus=self._dbus_bus, do_not_queue=True)
+        except NameExistsException:
+            logger.error(("A server with the name '{}' already exists on this" +
+                    " bus.").format(name))
+
+            raise ValueError("A server with the given name already exists on" +
+                    " the bus. You must choose a different name or a different" +
+                    " bus.")
 
         # Finalize the DBus initialization.
-        super(Server, self).__init__(bus_name, object_path)
+        super(Server, self).__init__(bus_name, '/')
 
         # Internal variables
-        self._object_path = object_path
+        self._bus_name = bus_name
         self._client_handlers = []
         self._message_handler = MessageHandler()
         self._running = False
@@ -108,8 +120,8 @@ class Server(Object):
                 return handler.path
 
         # No handler found, so create a new one.
-        handler = ClientHandler(program_name, multi_client, self._dbus_bus,
-                self._message_handler, self._object_path, self)
+        handler = ClientHandler(program_name, multi_client,
+                self._message_handler, self._bus_name, self)
 
         return handler.path
 
@@ -136,7 +148,6 @@ class Server(Object):
         if handler in self._client_handlers:
             logger.debug("Remove client handler: {}".format(handler.id))
             self._client_handlers.remove(handler)
-            del handler
 
     def run(self):
         """

@@ -21,8 +21,8 @@ class Client:
     This class should be used to establish connections to the server
     as well as sending messages to it.
     """
-    def __init__(self, program_name, server_path = '/', multi_client = False,
-            lingering = False, use_system_bus = False):
+    def __init__(self, program_name, server_bus_suffix = None,
+            multi_client = False, lingering = False, use_system_bus = False):
         """
         Constructor for the class. The connection to the server is
         established here.
@@ -30,10 +30,11 @@ class Client:
         :param program_name: The name of the program for which messages
                             should be displayed.
         :type program_name: str
-        :param server_path: An optional path where the server is located.
-                            This is only needed if there are multiple servers.
-                            (Defaults to '/')
-        :type server_path: str
+        :param server_bus_suffix: An optional name suffix where the server is
+                                  located. This is only needed if there are
+                                  multiple servers on the same Bus.
+                                  (Defaults to None)
+        :type server_bus_suffix: str
         :param mutli_client: Flag which indicates, whether there will be
                              multiple clients registering for the same name,
                              which should be treated as one client.
@@ -63,7 +64,7 @@ class Client:
         self._last_message = ''         #< The id of the message which was
 
         # Register at the server.
-        self._register(program_name, server_path, multi_client, lingering)
+        self._register(program_name, server_bus_suffix, multi_client, lingering)
 
                                         #  sent last.
 
@@ -75,15 +76,18 @@ class Client:
         # Unregister before quitting.
         self._unregister()
 
-    def _register(self, program_name, server_path, multi_client, lingering):
+    def _register(self, program_name, server_bus_suffix, multi_client,
+            lingering):
         """
         Register the current client at the server.
 
         :param program_name: The name which should be used for registration.
         :type program_name: str
-        :param server_path: An optional object path where the server is located.
-                            This is needed if there are multiple servers.
-        :type server_path: str
+        :param server_bus_suffix: An optional name suffix where the server is
+                                  located. This is only needed if there are
+                                  multiple servers on the same Bus.
+                                  (Defaults to None)
+        :type server_bus_suffix: str
         :param multi_client: Flag which indicates if there will be more clients
                              registering for the same client_name, which should
                              be treated as one client.
@@ -94,16 +98,21 @@ class Client:
         :type lingering: bool
 
         """
+        if server_bus_suffix is None:
+            server_bus = 'org.pynoter'
+        else:
+            server_bus = 'org.pynoter.' + server_bus_suffix
+
         # Connect to the server.
         server = Interface(
-                self._dbus_bus.get_object('org.pynoter', server_path),
+                self._dbus_bus.get_object(server_bus, '/'),
                 dbus_interface='org.pynoter.server'
         )
 
         # Get the handler for this client.
         handler_path = server.get_handler(program_name, multi_client)
         handler = Interface(
-                self._dbus_bus.get_object('org.pynoter', handler_path),
+                self._dbus_bus.get_object(server_bus, handler_path),
                 dbus_interface='org.pynoter.client_handler'
         )
 

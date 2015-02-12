@@ -58,8 +58,8 @@ class ClientHandler(Object):
         return str(uuid4()).replace('-', '_')
 
 
-    def __init__(self, program_name, multi_client, dbus_bus, message_handler,
-            object_path, server):
+    def __init__(self, program_name, multi_client, message_handler, bus_name,
+            server):
         """
         Constructor of the class. Here the DBus connection will be set up
         as well as other maintenance operations.
@@ -71,42 +71,35 @@ class ClientHandler(Object):
                              should serve multiple clients of the given
                              program.
         :type multi_client: bool
-        :param dbus_bus: The DBus bus which should be used to set everything up.
-        :type dbus_bus: SystemBus
         :param message_handler: The message handler thread, which handles the
                                 displaying of the notifications of the clients.
         :type message_handler: MessageHandler
-        :param object_path: The object path where the current server can be
-                            found. This client handler must be located below this
-                            path.
-        :type object_path: str
+        :param bus_name: The DBus bus name where the current server is located.
+        :type bus_name: BusName
         :param server: The server object for which the handler is working.
         :type server: Server
         """
-        logger.debug("Create a new client handler. (program: {}, path: {})".format(
-            program_name, object_path))
+        logger.debug(("Create a new client handler. (program: {}, " +
+                "bus_name: {})").format(
+                    program_name, bus_name.get_name()))
 
         # First get the unique object path for this handler.
         self._id = ClientHandler.create_unique_id(program_name)
-        if object_path.endswith("/"):
-            self._object_path = object_path + "handlers/" + self._id
-        else:
-            self._object_path = object_path + "/handlers/" + self._id
+        self._object_path = '/' + self._id
 
-        # Initialize the DBus connection.
-        bus_name = BusName('org.pynoter', bus=dbus_bus)
+        # Create the DBus connection.
         super(ClientHandler, self).__init__(bus_name, self._object_path)
 
         # Initialize the notifications
         if not notify.init("client_handler_" + self._id):
-            logger.error("Failad to initialize notifications.")
+            logger.error("Failed to initialize notifications.")
             raise RuntimeError("Failed to initialize notifications")
 
         self._notification = Notification.new("", "")
 
         # Internal variables
         self._program_name = program_name
-        self._dbus_bus = dbus_bus
+        self._bus_name = bus_name
         self._message_handler = message_handler
         self._server = server
 
@@ -126,12 +119,12 @@ class ClientHandler(Object):
 
     def _remove_from_server(self):
         """
-        Remove this handler from the current pynoter server and form DBus.
+        Remove this handler from the current pynoter server and from DBus.
         """
         self._server.remove_client_handler(self)
 
         # Tear down the DBus connection.
-        self.remove_from_connection(self._dbus_bus, self._object_path)
+        self.remove_from_connection(self._bus_name.get_bus(), self._object_path)
 
     # DBus Interface
 
@@ -235,7 +228,7 @@ class ClientHandler(Object):
         # Create the message object and enqueue it at the message handlers
         # queue. Use the id of the last message as reference if this was not
         # given by the user.
-        if reference is "":
+        if reference == "":
             reference = self._last_message
 
         message = Message(self._notification, subject, body, icon, timeout,
