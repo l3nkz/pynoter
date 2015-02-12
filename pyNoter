@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import logging
-from logging import StreamHandler
+from logging import StreamHandler, Formatter
 
 from argparse import ArgumentParser
 
@@ -9,23 +9,30 @@ from pynoter import Server
 
 
 if __name__ == "__main__":
-    # Initiate logging
+    # Initialize logging.
     logger = logging.getLogger('pynoter')
-    logger.addHandler(StreamHandler())
+    handler = StreamHandler()
+    formatter = Formatter(
+            fmt="%(asctime)s - %(name)s - %(funcName)s:%(lineno)d -- %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S")
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
 
-    # Command line argument parsing
+    # Command line argument parsing.
     commands = ArgumentParser(description="Advanced Notification Daemon")
     commands.add_argument("--debug", "-D", action="store_true", default=False,
             dest="debug", help="Show debug information.")
 
     parsed_args = commands.parse_args()
 
-    # Set options accordingly
+    # Set options accordingly.
     if parsed_args.debug:
         logger.setLevel(logging.DEBUG)
     else:
         logger.setLevel(logging.WARNING)
 
-    # Start the server
+    # Start the server.
+    logger.debug("Start server now.")
+
     server = Server()
     server.run()
