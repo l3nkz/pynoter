@@ -1,5 +1,7 @@
 [Unit]
 Description=pynoter server daemon
+Requires=dbus.service
+After=dbus.service
 
 [Service]
 ExecStart=/usr/bin/pyNoter --debug
