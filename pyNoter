@@ -14,10 +14,6 @@ if __name__ == "__main__":
     # Initialize logging.
     logger = logging.getLogger('pynoter')
     handler = StreamHandler()
-    formatter = Formatter(
-            fmt="%(asctime)s - %(name)s - %(funcName)s:%(lineno)d -- %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S")
-    handler.setFormatter(formatter)
     logger.addHandler(handler)
 
     # Command line argument parsing.
@@ -45,11 +41,19 @@ if __name__ == "__main__":
     # Set options accordingly.
     if debug:
         logger.setLevel(logging.DEBUG)
+        formatter = Formatter(
+                fmt="%(asctime)s - %(name)s:%(lineno)d -- %(levelname)s:%(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S")
+        handler.setFormatter(formatter)
     else:
         logger.setLevel(logging.WARNING)
+        formatter = Formatter(
+                fmt="%(asctime)s -- %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S")
+        handler.setFormatter(formatter)
 
     # Start the server.
-    logger.debug("Start server now.")
+    print("Start server now...")
 
     try:
         server = Server(bus_suffix=bus_suffix, use_system_bus=use_system)
