@@ -13,7 +13,7 @@
 # (c) Till Smejkal - till.smejkal+pynoter@ossmail.de
 ###############################################################################
 
-from dbus import SessionBus, Interface
+from dbus import SessionBus, SystemBus, Interface
 
 
 class Client:
@@ -21,7 +21,8 @@ class Client:
     This class should be used to establish connections to the server
     as well as sending messages to it.
     """
-    def __init__(self, program_name, object_path = '/', multi_client = False):
+    def __init__(self, program_name, server_path = '/', multi_client = False,
+            lingering = False, use_system_bus = False):
         """
         Constructor for the class. The connection to the server is
         established here.
@@ -29,20 +30,42 @@ class Client:
         :param program_name: The name of the program for which messages
                             should be displayed.
         :type program_name: str
-        :param object_path: An optional path where to register at the server.
+        :param server_path: An optional path where the server is located.
                             This is only needed if there are multiple servers.
                             (Defaults to '/')
-        :type object_path: str
+        :type server_path: str
         :param mutli_client: Flag which indicates, whether there will be
                              multiple clients registering for the same name,
                              which should be treated as one client.
                              (Defaults to True)
         :type multi_client: bool
+        :param lingering: Flag which indicates, that the handler for this
+                          client should stay alive even if the current client
+                          vanishes. This can be useful for short living
+                          clients. (Defaults to False)
+        :type lingering: bool
+        :param use_system_bus: Flag which indicates, whether the system bus of
+                               DBus or the normal session bus should be used.
+                               (Defaults to False)
+        :type use_system_bus: bool
         """
-        self.object_path = object_path
+        if use_system_bus:
+            self._dbus_bus = SystemBus()
+        else:
+            self._dbus_bus = SessionBus()
 
-        # Register on startup.
-        self._register(program_name, self.object_path, multi_client)
+        # Internal variables
+        self._id = None                 #< The identifier of this client which
+                                        #  we get from the handler.
+
+        self._handler = None            #< The client handler which serves us.
+
+        self._last_message = ''         #< The id of the message which was
+
+        # Register at the server.
+        self._register(program_name, server_path, multi_client, lingering)
+
+                                        #  sent last.
 
     def __del__(self):
         """
@@ -50,51 +73,60 @@ class Client:
         released here.
         """
         # Unregister before quitting.
-        self._unregister(self.port_name, self.object_path)
+        self._unregister()
 
-    def _register(self, client_name, object_path, multi_client):
+    def _register(self, program_name, server_path, multi_client, lingering):
         """
         Register the current client at the server.
 
-        :param client_name: The name which should be used for registration.
-        :type client_name: str
-        :param object_path: An optional path where the registration should go at.
+        :param program_name: The name which should be used for registration.
+        :type program_name: str
+        :param server_path: An optional object path where the server is located.
                             This is needed if there are multiple servers.
-        :type object_path: str
+        :type server_path: str
         :param multi_client: Flag which indicates if there will be more clients
                              registering for the same client_name, which should
                              be treated as one client.
         :type multi_client: bool
+        :param lingering: Flag which indicates, that the handler for this
+                          client should stay alive even if the current client
+                          vanishes.
+        :type lingering: bool
+
         """
         # Connect to the server.
         server = Interface(
-                SessionBus().get_object('org.pynoter.server', object_path),
+                self._dbus_bus.get_object('org.pynoter', server_path),
                 dbus_interface='org.pynoter.server'
         )
 
-        # The register method returns the port name where we later can send our
-        # messages to.
-        self.port_name = server.register(client_name, multi_client)
+        # Get the handler for this client.
+        handler_path = server.get_handler(program_name, multi_client)
+        handler = Interface(
+                self._dbus_bus.get_object('org.pynoter', handler_path),
+                dbus_interface='org.pynoter.client_handler'
+        )
 
-    def _unregister(self, client_name, object_path):
+        # Register at the handler.
+        self._id = handler.register()
+        self._handler = handler
+
+        # Enable lingering and multi client support at the handler if wanted
+        # by the user.
+        if lingering:
+            handler.enable_lingering(self._id)
+
+        if multi_client:
+            handler.enable_multi_client(self._id)
+
+    def _unregister(self):
         """
         Unregister the current client from the server.
-
-        :param client_name: The name which was used during the registration.
-        :type client_name: str
-        :param object_path: The path which was used during the registration.
-        :type object_path: str
         """
-        # Connect to the server.
-        server = Interface(
-                SessionBus().get_object('org.pynoter.server', object_path),
-                dbus_interface='org.pynoter.server'
-        )
+        self._handler.unregister(self._id)
 
-        server.unregister(client_name)
-
-    def send_message(self, subject, body, icon = "", timeout = 6000,
-            append = True, update = False):
+    def display_message(self, subject, body, icon = "", timeout = 6000,
+            append = True, update = False, reference = ""):
         """
         Send a new notification message to the pynoter server.
 
@@ -117,13 +149,16 @@ class Client:
                        replace all the currently visible messages and not only
                        the last one which was sent. (Defaults to False)
         :type update: bool
+        :param reference: The identifier of the message which should be updated
+                          or to which this one should be appended.
+                          (If this is omitted the id of the last message
+                          handled by the corresponding handler will be used.)
+        :type reference: str
+        :rtype: str
+        :return: The unique identifier for this message.
         """
-        # Connect to the message listener for this client.
-        listener = Interface(
-                SessionBus().get_object('org.pynoter.listener',
-                    '/'+self.port_name),
-                dbus_interface='org.pynoter.listener'
-        )
-
-        listener.send_message(subject, message, icon, timeout, append, update)
+        # Send the message to the handler and save the message id, so that
+        # we are able to refer to this message again.
+        return self._handler.display_message(self._id, subject, body, icon,
+                timeout, append, update, reference)
 
