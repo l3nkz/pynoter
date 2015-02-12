@@ -73,6 +73,5 @@ python setup.py install
 
 
 Additionally, this repository also provides an executable for the server and a systemd service
-file which can be used directly as they are or be used as a reference to implement them on your
-own.
+file which can be used directly as they are or as a reference to implement them on your own.
 
