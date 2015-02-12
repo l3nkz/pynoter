@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 
 ###############################################################################
-# pynoted -- server
+# pynoter -- server
 #
 # The Server of the pynoter package. This class handles register and
-# unregister request of clients and coordinates the control flow.
+# unregister request of clients and coordinates the whole scene.
 #
 # License: GPLv3
 #
 # (c) Till Smejkal - till.smejkal+pynoter@ossmail.de
 ###############################################################################
 
-from dbus import SessionBus
+from dbus import SessionBus, SystemBus
 from dbus.service import Object, BusName, method
 from dbus.mainloop.glib import DBusGMainLoop
 
@@ -28,150 +28,162 @@ logger = logging.getLogger(__name__)
 
 class Server(Object):
     """
-    Server class
+    This class provides the basic entrance point for clients. Hence it handles
+    all the clients and controls everything.
     """
-    def __init__(self, object_path='/'):
+
+    def __init__(self, object_path = '/', use_system_bus = False):
         """
-        Initialization method for the class.
+        Constructor of the class. Within this method the DBus connection will
+        be initiated as well as other setup.
 
-        :param object_path: the path where this server should be accessible
+        :param object_path: The path where this server should be accessible.
+                            This is only necessary to change, if there are
+                            multiple pynoter server on the same DBus-Bus.
+                            (Defaults to '/')
+        :type object_path: str
+        :param use_system_bus: Flag which indicates, that the server should use
+                               the DBus system bus instead of the normal
+                               session bus. This must be done if this server is
+                               started as a system wide daemon.
+                               (Defaults to False)
+        :type use_system_bus: bool
         """
-        # initialize the dbus name
-        logger.debug("[Server]Initiating DBus connection (object_path = %s)"
-                % (object_path,))
+        # Initialize the DBus connection.
+        if use_system_bus:
+            self._dbus_bus = SystemBus(mainloop=DBusGMainLoop(set_as_default=True))
 
-        self.bus = SessionBus(mainloop=DBusGMainLoop(set_as_default=True))
-        busName = BusName('org.pynoter.server', bus=self.bus)
+            logger.debug(("Initiating DBus-system connection " +
+                "(path: {})").format(object_path)
+            )
+        else:
+            self._dbus_bus = SessionBus(mainloop=DBusGMainLoop(set_as_default=True))
 
-        # forward initialization to parent class
-        super(Server, self).__init__(busName, object_path)
+            logger.debug(("Initiating DBus-session connection " +
+                "(path: {})").format(object_path)
+            )
 
-        #list of programs with the corresponding message handler
-        self.programs = {}
-        self.cnt = 0
+        # Create the bus name.
+        bus_name = BusName('org.pynoter', bus=self._dbus_bus)
 
-        logger.debug("[Server]Creating Worker Thread")
+        # Finalize the DBus initialization.
+        super(Server, self).__init__(bus_name, object_path)
 
-        self.worker = MessageHandler()
+        # Internal variables
+        self._object_path = object_path
+        self._client_handlers = []
+        self._message_handler = MessageHandler()
+        self._running = False
 
-        self.running = False
+        self._main_loop = glib.MainLoop()
+        glib.threads_init()
 
     def __del__(self):
-        # clean up at the end
+        """
+        Destructor of the class. Properly shutdown everything.
+        """
         self.stop()
 
-    def stop(self):
-        if self.running:
-            logger.debug("[Server]Stopping MainLoop and Worker Thread")
-
-            self.loop.quit()
-            self.worker.stop()
-
-            logger.debug("[Server]Wait for Worker Thread to finish")
-
-            self.worker.join()
-
-            self.running = False
+    # DBus Interface
 
     @method(dbus_interface='org.pynoter.server', in_signature='sb',
             out_signature='s')
-    def register(self, program_name, multi_client=False):
+    def get_handler(self, program_name, multi_client = False):
         """
-        Method for registering new programs.
+        Get the address of a handler for the given program.
 
-        :param program_name: the name of the program which want to be
-                             registered.
-        :param multi_client: indicates whether this program can have multiple
-                             clients. If it is set to True, then will the old
-                             client handlers path be returned. This way many
-                             clients can use the same client handler.
-                             Otherwise a new client handler will be created
-                             and a unique path returned.
+        :param program_name: The name of the program for which a client wants
+                             to know the handler.
+        :type program_name: str
+        :param multi_client: Flag which indicates whether or not the handler
+                             should serve multiple clients from the same
+                             program.
+        :type multi_client: bool
+        :rtype: str
+        :return: The address of the handler for this particular program.
         """
-        logger.debug("[Server]Program %s is going to register"
-                % (program_name,))
+        # Check if a handler already exists.
+        for handler in self._client_handlers:
+            if handler.can_handle(program_name, multi_client):
+                return handler.path
 
-        if program_name in self.programs:
-            logger.debug("[Server]Program with name %s already known"
-                    % (program_name,))
+        # No handler found, so create a new one.
+        handler = ClientHandler(program_name, multi_client, self._dbus_bus,
+                self._message_handler, self._object_path, self)
 
-            (handler, _) = self.programs[program_name]
-            # we already have another program with this name
-            if multi_client:
-                # the program is specified as multi client
-                # return the handler of the already registered program
-                logger.debug("[Server]New Client for %s registred"
-                        % (program_name,))
+        return handler.path
 
-                # update the number of clients for the program
-                (handler, cnt) = self.programs[program_name]
-                self.programs[program_name] = (handler, cnt+1)
+    # Normal Interface
 
-                return program_name
+    def add_client_handler(self, handler):
+        """
+        Add a new client handler to the internal list.
 
-            # give the program an unique name for its message handler
-            self.cnt += 1
-            unique_name = program_name + str(self.cnt)
+        :param handler: The client handler which should be added.
+        :type handler: ClientHandler
+        """
+        if not handler in self._client_handlers:
+            logger.debug("Add new client handler: {}".format(handler.id))
+            self._client_handlers.append(handler)
 
-        else:
-            # otherwise take the program's name
-            unique_name = program_name
+    def remove_client_handler(self, handler):
+        """
+        Remove a client handler from the internal list.
 
-        handler = ClientHandler(self.bus, unique_name, self.worker)
-
-        # save the handler instance
-        self.programs[unique_name] = (handler, 1)
-
-        logger.debug("[Server]New Program %s as %s registered."
-                % (program_name, unique_name))
-
-        return unique_name
-
-    @method(dbus_interface='org.pynoter.server', in_signature='s',
-            out_signature='b')
-    def unregister(self, program_name):
-        logger.debug("[Server]Program %s is going to unregister"
-                % (program_name,))
-
-        if program_name in self.programs:
-            # get the handler and remove it's path on the DBus channel
-            (handler, cnt) = self.programs[program_name]
-            if cnt == 1:
-                # if this is the last / only client for the program than we
-                # can remove it.
-                handler.stop()
-                # remove the handler again
-                del self.programs[program_name]
-
-                logger.debug("[Server]Program %s successfully unregistered"
-                        % (program_name,))
-            else:
-                # otherwise just decrement the number of clients.
-                self.programs[program_name] = (handler, cnt-1)
-                logger.debug("[Server]Client for %s successfully " +
-                        "unregistered" % (program_name,))
-
-            return True
-
-        else:
-            logger.debug("[Server]Program %s was not registered."
-                    % (program_name,))
-
-            return False
+        :param handler: The handler which should be removed.
+        :type handler: ClientHandler
+        """
+        if handler in self._client_handlers:
+            logger.debug("Remove client handler: {}".format(handler.id))
+            self._client_handlers.remove(handler)
+            del handler
 
     def run(self):
         """
-        Method to start server and let him run for ever.
-        This will start the gobject mainloop.
+        Start the server. This will start the main loop and cause the server
+        to wait for messages on the bus.
         """
-        logger.debug("[Server]Starting Worker Thread and MainLoop")
-
-        self.loop = glib.MainLoop()
-        glib.threads_init()
-        self.running = True
-
-        self.worker.start()
         try:
-            self.loop.run()
+            self.start()
         except KeyboardInterrupt:
             self.stop()
+
+    def start(self):
+        """
+        Start up the whole server so that it can listen for messages.
+        """
+        # Just start if we are not currently running.
+        if not self._running:
+            self._running = True
+
+            logger.debug("Starting server...")
+
+            logger.debug("Start message handler.")
+            self._message_handler.start()
+
+            logger.debug("Start main loop.")
+            self._main_loop.run()
+
+    def stop(self):
+        """
+        Safely stop a running server.
+        """
+        # Just stop if we are currently running.
+        if self._running:
+            self._running = False
+
+            logger.debug("Stopping server...")
+
+            logger.debug("Tear down DBus connection.")
+            self.remove_from_connection(self._dbus_bus, self._object_path)
+
+            logger.debug("Stop main loop.")
+            self._main_loop.quit()
+
+            logger.debug("Stop message handler.")
+            self._message_handler.stop()
+            if self._message_handler.isAlive():
+                self._message_handler.join()
+
+            logger.debug("Stopping done.")
+
