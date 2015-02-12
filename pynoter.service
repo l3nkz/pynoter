@@ -1,0 +1,9 @@
+[Unit]
+Description=pynoter server daemon
+
+[Service]
+ExecStart=/usr/bin/pyNoter --debug
+
+[Install]
+WantedBy=default.target
+
