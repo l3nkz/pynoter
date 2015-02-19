@@ -135,7 +135,7 @@ class Client:
         self._handler.unregister(self._id)
 
     def display_message(self, subject, body, icon = "", timeout = 6000,
-            append = True, update = False, reference = ""):
+            append = False, update = False, reference = None):
         """
         Send a new notification message to the pynoter server.
 
@@ -151,7 +151,7 @@ class Client:
         :type timeout: int
         :param append: A flag which indicates that this message should be
                        appended to the last one, if possible.
-                       (Defaults to True)
+                       (Defaults to False)
         :type append: bool
         :param update: A flag which indicates that this message should update
                        (replace) the last message. Keep in mind, that this will
@@ -159,15 +159,23 @@ class Client:
                        the last one which was sent. (Defaults to False)
         :type update: bool
         :param reference: The identifier of the message which should be updated
-                          or to which this one should be appended.
-                          (If this is omitted the id of the last message
-                          handled by the corresponding handler will be used.)
+                          or to which this one should be appended. Use 'None' to
+                          indicate that the id of the last message should be
+                          used and use '""' to indicate that no reference is
+                          given. (Defaults to None)
         :type reference: str
         :rtype: str
         :return: The unique identifier for this message.
         """
-        # Send the message to the handler and save the message id, so that
-        # we are able to refer to this message again.
+        # As it is not possible to send None via DBus, change the meaning of
+        # the reference variable accordingly.
+        if reference is None:
+            reference = ""
+        elif reference == "":
+            reference = "not-set"
+
+        # Send the message to the handler and return the its unique message id
+        # to the client so that it can use it as reference later.
         return self._handler.display_message(self._id, subject, body, icon,
                 timeout, append, update, reference)
 

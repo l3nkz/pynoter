@@ -189,7 +189,7 @@ class ClientHandler(Object):
     @method(dbus_interface='org.pynoter.client_handler', in_signature='ssssibbs',
             out_signature='s')
     def display_message(self, client, subject, body = "", icon = "",
-            timeout = 6000, append = True, update = False, reference = ""):
+            timeout = 6000, append = False, update = False, reference = ""):
         """
         Display a notification message.
 
@@ -206,7 +206,7 @@ class ClientHandler(Object):
                         be visible. (Defaults to 6000)
         :type timeout: int
         :param append: Flag which indicates whether this message should be
-                       appended to the last one if possible. (Defaults to True)
+                       appended to the last one if possible. (Defaults to False)
         :type append: bool
         :param update: Flag which indicates whether this message should replace
                        the last one if possible. (Defaults to False)

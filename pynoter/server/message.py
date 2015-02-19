@@ -37,7 +37,7 @@ class Message:
         return str(uuid4()).replace('-', '_')
 
     def __init__(self, notification, subject, body = "", icon = "",
-            timeout = 6000, append = True, update = False, reference = None):
+            timeout = 6000, append = False, update = False, reference = ""):
         """
         Constructor of the class.
 
@@ -57,7 +57,7 @@ class Message:
         :type timeout: int
         :param append: Flag which indicates whether the current message should
                        be appended to the last one if possible.
-                       (Defaults to True)
+                       (Defaults to False)
         :type appand: bool
         :param update: Flag which indicates whether the current message should
                        replace the last one if possible.
@@ -66,7 +66,7 @@ class Message:
         :param reference: The unique identifier of the message which this message
                           should replace or be appended to. This is only
                           important if one of these flags are set.
-                          (Defaults to None)
+                          (Defaults to '""')
         :type reference: str
 
         """
