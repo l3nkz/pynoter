@@ -4,11 +4,15 @@ import logging
 from logging import StreamHandler, Formatter
 
 import sys
+from signal import SIGTERM, SIGINT, SIG_DFL, signal, sigwait
 
 from argparse import ArgumentParser
 
 from pynoter import Server
 
+
+def signal_handler(signum, stack):
+    pass
 
 if __name__ == "__main__":
     # Initialize logging.
@@ -70,7 +74,19 @@ if __name__ == "__main__":
 
     try:
         server = Server(bus_suffix=bus_suffix, use_system_bus=use_system)
-        server.run()
+        server.start()
+
+        # Use a custom signal handler for SIGTERM so that we don't get
+        # terminated directly but can shutdown properly.
+        signal(SIGTERM, signal_handler)
+
+        # Wait until we receive a signal.
+        sigwait([SIGTERM, SIGINT])
+
+        # Reset the signal handler for SIGTERM.
+        signal(SIGTERM, SIG_DFL)
+
+        server.stop()
     except Exception as e:
         print(e)
 

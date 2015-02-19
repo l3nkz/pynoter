@@ -20,6 +20,8 @@ import gi.repository.GLib as glib
 
 import logging
 
+from threading import Thread
+
 from pynoter.server.client_handler import ClientHandler
 from pynoter.server.message_handler import MessageHandler
 
@@ -27,7 +29,7 @@ from pynoter.server.message_handler import MessageHandler
 logger = logging.getLogger(__name__)
 
 
-class Server(Object):
+class Server(Object, Thread):
     """
     This class provides the basic entrance point for clients. Hence it handles
     all the clients and controls everything.
@@ -54,9 +56,9 @@ class Server(Object):
 
         # Create the bus name.
         if bus_suffix is None:
-            name = 'org.pynoter'
+            name = "org.pynoter"
         else:
-            name = 'org.pynoter.' + bus_suffix
+            name = "org.pynoter." + bus_suffix
 
         # Determine which bus to use.
         if use_system_bus:
@@ -79,7 +81,10 @@ class Server(Object):
                     " bus.")
 
         # Finalize the DBus initialization.
-        super(Server, self).__init__(bus_name, '/')
+        Object.__init__(self, bus_name, '/')
+
+        # Initialize the thread.
+        Thread.__init__(self)
 
         # Internal variables
         self._bus_name = bus_name
@@ -87,7 +92,7 @@ class Server(Object):
         self._message_handler = MessageHandler()
         self._running = False
 
-        self._main_loop = glib.MainLoop()
+        self._main_loop = glib.MainLoop.new(None, False)
         glib.threads_init()
 
     def __del__(self):
@@ -151,13 +156,15 @@ class Server(Object):
 
     def run(self):
         """
-        Start the server. This will start the main loop and cause the server
-        to wait for messages on the bus.
+        The processing threads main run method.
+
+        This method should not be called directly as it gets called by the
+        start method of the Thread class after the thread has been successfully
+        created and dispatched.
         """
-        try:
-            self.start()
-        except KeyboardInterrupt:
-            self.stop()
+        logger.debug("Enter main loop...")
+        self._main_loop.run()
+        logger.debug("Exit main loop...")
 
     def start(self):
         """
@@ -172,12 +179,12 @@ class Server(Object):
             logger.debug("Start message handler.")
             self._message_handler.start()
 
-            logger.debug("Start main loop.")
-            self._main_loop.run()
+            # Call Thread's start method so that the server thread is started.
+            Thread.start(self)
 
     def stop(self):
         """
-        Safely stop a running server.
+        Safely stop a running server again.
         """
         # Just stop if we are currently running.
         if self._running:
@@ -188,13 +195,13 @@ class Server(Object):
             logger.debug("Tear down DBus connection.")
             self.remove_from_connection(self._dbus_bus, self._object_path)
 
-            logger.debug("Stop main loop.")
-            self._main_loop.quit()
-
             logger.debug("Stop message handler.")
             self._message_handler.stop()
             if self._message_handler.isAlive():
                 self._message_handler.join()
+
+            logger.debug("Stop main loop.")
+            self._main_loop.quit()
 
             logger.debug("Stopping done.")
 
