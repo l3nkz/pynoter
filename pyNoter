@@ -23,6 +23,10 @@ if __name__ == "__main__":
     commands.add_argument("--debug", "-D", action="store_true", default=False,
             dest="debug", help="Show debug information.")
 
+    commands.add_argument("--systemd", "-s", action="store_true", default=False,
+            dest="systemd", help="Output information as if this program is " +
+            "running as systemd service.")
+
     # Use system bus instead of session bus.
     commands.add_argument("--system", "-S", action="store_true", default=False,
             dest="system", help="Use system bus instead of session bus.")
@@ -35,22 +39,31 @@ if __name__ == "__main__":
     # Parse arguments
     parsed_args = commands.parse_args()
     debug = parsed_args.debug
+    systemd = parsed_args.systemd
     use_system = parsed_args.system
     bus_suffix = parsed_args.bus_suffix
 
     # Set options accordingly.
     if debug:
         logger.setLevel(logging.DEBUG)
-        formatter = Formatter(
-                fmt="%(asctime)s - %(name)s:%(lineno)d -- %(levelname)s:%(message)s",
+        if systemd:
+            formatter = Formatter(
+                    fmt="%(name)s:%(lineno)d -- %(levelname)s: %(message)s")
+        else:
+            formatter = Formatter(
+                    fmt="%(asctime)s - %(name)s:%(lineno)d -- %(levelname)s:" +
+                    " %(message)s",
                 datefmt="%Y-%m-%d %H:%M:%S")
-        handler.setFormatter(formatter)
     else:
         logger.setLevel(logging.WARNING)
-        formatter = Formatter(
-                fmt="%(asctime)s -- %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S")
-        handler.setFormatter(formatter)
+        if systemd:
+            formatter = Formatter(fmt="%(message)s")
+        else:
+            formatter = Formatter(
+                    fmt="%(asctime)s -- %(message)s",
+                    datefmt="%Y-%m-%d %H:%M:%S")
+
+    handler.setFormatter(formatter)
 
     # Start the server.
     print("Start server now...")
@@ -59,6 +72,6 @@ if __name__ == "__main__":
         server = Server(bus_suffix=bus_suffix, use_system_bus=use_system)
         server.run()
     except Exception as e:
-        print(str(e))
+        print(e)
 
         sys.exit(1)
