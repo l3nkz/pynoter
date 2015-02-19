@@ -158,7 +158,7 @@ def closure(item, queue):
             # Find all items revising the found ones recursively.
             others.extend(closure(i, queue))
 
-        return [item] + others
+        return others
 
 
 class HandlerStopItem:
