@@ -225,14 +225,14 @@ class Message:
         return self._closed_reason == Message.ClosedReason.Vanished
 
     @property
-    def revises(self):
+    def appends(self):
         """
-        Whether or not the current message wants to revise another one.
+        Whether or not the append flag is set for this message.
 
         :rtype: bool
-        :return: Whether or not another message should be revised by this one.
+        :return: Whether or not tho append flag is set.
         """
-        return self._append or self._update
+        return self._append
 
     @property
     def id(self):
@@ -255,6 +255,16 @@ class Message:
         return self._reference
 
     @property
+    def subject(self):
+        """
+        Get the subject of this message.
+
+        :rtype: str
+        :return: The subject of this message.
+        """
+        return self._subject
+
+    @property
     def timeout(self):
         """
         Get the display timeout of the message.
@@ -263,4 +273,14 @@ class Message:
         :return: The time in ms how long the message is shown.
         """
         return self._timeout
+
+    @property
+    def updates(self):
+        """
+        Whether or not the update flag is set for this message.
+
+        :rtype: bool
+        :return: Whether or not the update flag is set.
+        """
+        return self._update
 

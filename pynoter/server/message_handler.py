@@ -131,8 +131,17 @@ def revises(item1, item2):
     if item1 is None or item2 is None:
         return False
 
-    if item1.message.revises:
+    # Check if the first item revises the second one.
+    if item1.message.updates:
+        # If the item performs an update, just the reference id is important.
         return item1.ref_id == item2.id
+
+    if item1.message.appends:
+        # If the item performs an append, the reference id and the subjects of
+        # the two messages are important as the notification library only
+        # append one message to another if they have the same subject.
+        return item1.ref_id == item2.id and \
+                item1.message.subject == item2.message.subject
 
     return False
 
