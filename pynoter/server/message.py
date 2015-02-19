@@ -12,6 +12,11 @@
 ###############################################################################
 
 from gi.repository.Notify import Notification
+from gi.repository.GLib import Variant
+
+from threading import Condition
+
+from enum import IntEnum
 
 from uuid import uuid4
 
@@ -29,6 +34,34 @@ class Message:
     notification daemon.
     """
 
+    class ClosedReason(IntEnum):
+        """
+        Reasons why the notification bubble is closed.
+        """
+
+        @classmethod
+        def get(cls, reason):
+            """
+            Get the enum instance for a given int value.
+
+            :param reason: The integer value for which the enum instance should
+                           be found.
+            :type reason: int
+            :rtype: ClosedReason
+            :return: The corresponding enum instance or ClosedReason.Unknown if
+                     there is none for the given value.
+            """
+            for cr in cls:
+                if reason == cr.value:
+                    return cr
+
+            return cls.Unknown
+
+        Unknown = -1
+        Vanished = 1
+        Explicit = 3
+
+
     @staticmethod
     def create_unique_id():
         """
@@ -36,14 +69,14 @@ class Message:
         """
         return str(uuid4()).replace('-', '_')
 
-    def __init__(self, notification, subject, body = "", icon = "",
+    def __init__(self, client_handler, subject, body = "", icon = "",
             timeout = 6000, append = False, update = False, reference = ""):
         """
         Constructor of the class.
 
-        :param notification: The notification object which was previously used
-                             by the client from which this message comes.
-        :type notification: Notification
+        :param client_handler: The client handler which handles the client to
+                               which this message belongs.
+        :type client_handler: ClientHandler
         :param subject: The subject of the notification message.
         :type subject: str
         :param body: The body of the notification message. (Defaults to "")
@@ -80,51 +113,116 @@ class Message:
         self._timeout = timeout
         self._append = append
         self._update = update
-        self._reference = reference if reference is not None else "not_set"
-        self._notification = notification
+        self._reference = reference
+        self._client_handler = client_handler
 
-    def display(self):
+        self._closed_callback_id = -1
+
+        self._closed_condition = Condition()
+        self._closed_reason = None
+
+    def _closed_callback(self, notification):
+        """
+        Callback for the Notification class which is called if the notification
+        for this message gets closed.
+
+        This function will set the internal reason variable and notify all
+        threads which wait for the notification to close.
+
+        :param notification: The closed notification instance.
+        :type notification: Notification
+        """
+        self._closed_reason = Message.ClosedReason.get(
+                notification.get_closed_reason())
+
+        logger.debug("Notification closed with {}".format(
+            self._closed_reason.name))
+
+        with self._closed_condition:
+            # Notify all waiting threads that the notification got closed.
+            self._closed_condition.notify_all()
+
+        notification.disconnect(self._closed_callback_id)
+        self._closed_callback_id = -1
+
+    def display(self, use_flags = True):
         """
         Display the notification message on the screen using the notification
         daemon.
 
+        :param use_flags: Whether or not the append and update flags should be
+                          used when the message is displayed.
+                          (Defaults to True)
+        :param use_flags: bool
         :rtype: bool
         :return: Whether displaying of the message worked or not.
         """
-        logger.debug("Display message (S: {}, B: {}, T: {})".format(
-            self._subject, self._body, self._timeout))
+        if not use_flags:
+            logger.debug("Display message not using flags.")
+            self._update = 0
+        else:
+            logger.debug("Display message using flags.")
+
+        logger.debug("Display message (S:{}, B:{}, T:{}, A:{}, U:{})".format(
+            self._subject, self._body, self._timeout, self._append,
+            self._update))
 
         if self._update:
             # This message should replace the last one. So alter the last
             # notification message object.
-            logger.debug("Replace old message")
+            logger.debug("Update old message.")
 
-            self._notification.update(self._subject, self._body, self._icon)
+            self._client_handler.notification.update(self._subject,
+                    self._body, self._icon)
         else:
             # The old message should not be replaced, so create a new
             # notification message object.
-            self._notification = Notification.new(self._subject, self._body,
-                    self._icon)
+            logger.debug("Create new message.")
 
-            # Set the append hint at the notification message if append was
-            # requested by the user.
-            if self._append:
-                logger.debug("Set append hint to the message")
+            self._client_handler.notification = Notification.new(
+                    self._subject, self._body, self._icon)
 
-                self._notification.set_hint_string("x-canonical-append",
-                        "true")
+        # Set append hint, so that following messages can be appended to this
+        # one.
+        self._client_handler.notification.set_hint("x-canonical-append",
+                Variant.new_string("true"))
+
+        # Register for the close event of the notification.
+        self._closed_reason = None
+        self._closed_callback_id = \
+                self._client_handler.notification.connect("closed",
+                        self._closed_callback)
 
         # We now have a properly constructed notification message object. So we
         # can show it now on the screen.
-        self._notification.set_timeout(self._timeout)
+        self._client_handler.notification.set_timeout(self._timeout)
 
-        if not self._notification.show():
-            logger.error("Failed to show message (S: {}, B: {})".format(
+        if not self._client_handler.notification.show():
+            logger.error("Failed to show the message.".format(
                 self._subject, self._body))
 
             return False
 
+        logger.debug("Message successfully showed.")
+
         return True
+
+    def wait_for_close(self):
+        """
+        Wait until the notification for this message gets closed.
+
+        This method will block if the message is not yet closed until it gets
+        closed or otherwise return immediately.
+
+        :rtype: bool
+        :return: True if the notification vanished, False if it got closed
+                 differently.
+        """
+        if self._closed_reason is None:
+            with self._closed_condition:
+                self._closed_condition.wait(self._timeout/1000)
+
+        return self._closed_reason == Message.ClosedReason.Vanished
 
     @property
     def revises(self):

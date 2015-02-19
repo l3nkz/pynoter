@@ -343,6 +343,16 @@ class ClientHandler(Object):
         return self._lingering
 
     @property
+    def notification(self):
+        """
+        Get the internal notification object of this handler.
+
+        :rtype: Notification
+        :return: The internal notification object of this handler.
+        """
+        return self._notification
+
+    @property
     def path(self):
         """
         Get the object path where this handler can be reached.

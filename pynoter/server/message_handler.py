@@ -18,8 +18,6 @@
 
 from threading import Thread, Lock, RLock, Semaphore
 
-from time import sleep, time
-
 import logging
 
 
@@ -283,14 +281,6 @@ class MessageHandler(Thread):
                                     #  accessed from this thread and from
                                     #  others as well.
 
-        self._wait_until = time()   #< Time point until the execution should be
-                                    #  interrupted so that messages do not
-                                    #  overlap.
-
-        self._wait_lock = Lock()    #< Lock for the wait time point as it is
-                                    #  accessed from this thread and from
-                                    #  others as well.
-
     def _reset_current(self):
         """
         Reset the information about the currently shown message to its default.
@@ -298,20 +288,20 @@ class MessageHandler(Thread):
         with self._current_lock:
             self._current = None
 
-    def _show_without_closure(self, item):
+    def _show_without_closure(self, item, use_flags = True):
         """
         Display the given notification message together without all the other
         messages part of its closure.
 
         :param item: The message queue item which should be displayed.
         :type item: MessageItem
+        :param use_flags: Whether the message flags should be used while
+                          displaying or not. (Defaults to True)
+        :type use_flags: bool
         """
-        if item.message.display():
+        if item.message.display(use_flags):
             with self._current_lock:
                 self._current = item
-
-            with self._wait_lock:
-                self._wait_until = time() + (item.message.timeout / 1000) + 1
 
     def _show_with_closure(self, item):
         """
@@ -322,29 +312,29 @@ class MessageHandler(Thread):
         :type item: MessageItem
         """
         with self._current_lock:
-            # Calculate and display all items of the closure of the queue.
-            for i in closure(item, self._queue):
-                self._show_without_closure(i)
+            # Calculate the closure for the item.
+            clo = closure(item, self._queue)
 
-                # Sleep shortly after displaying this message, to get a smooth
-                # displaying for the others.
-                sleep(0.2)
+            # Display the item without flags.
+            self._show_without_closure(item, use_flags=False)
+
+            # Display the item from the closure.
+            for i in clo:
+                self._show_without_closure(i)
 
     def _wait(self):
         """
         Wait until the message currently displayed vanishes.
         """
         while True:
-            with self._wait_lock:
-                wait_until = self._wait_until
+            logger.debug("Wait until the current message vanishes.")
 
-            current = time()
+            with self._current_lock:
+                cur = self._current
 
-            if current < wait_until:
-                logger.debug("Wait for {} s".format(wait_until - current))
+            if cur.message.wait_for_close():
+                logger.debug("Waiting done.")
 
-                sleep(wait_until - current)
-            else:
                 return
 
     def enqueue(self, handler, message):
@@ -359,8 +349,6 @@ class MessageHandler(Thread):
         :param message: The message object which should be displayed.
         :type message: Message
         """
-        logger.debug("Enqueue new message from {}.".format(handler.id))
-
         item = MessageItem(handler, message)
 
         with self._current_lock:
@@ -375,6 +363,8 @@ class MessageHandler(Thread):
                 return
 
         # Otherwise, just add it to the queue.
+        logger.debug("Enqueue message from {}.".format(handler.id))
+
         self._queue.enqueue(item)
 
     def run(self):
