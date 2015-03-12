@@ -341,7 +341,7 @@ class MessageHandler(Thread):
             with self._current_lock:
                 cur = self._current
 
-            if cur.message.wait_for_close():
+            if cur is None or cur.message.wait_for_closed():
                 logger.debug("Waiting done.")
 
                 return
