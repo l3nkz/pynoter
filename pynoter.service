@@ -4,7 +4,7 @@ Requires=dbus.service
 After=dbus.service
 
 [Service]
-ExecStart=/usr/bin/pyNoter --debug --systemd
+ExecStart=/usr/bin/pyNoter server --debug --systemd
 
 [Install]
 WantedBy=default.target

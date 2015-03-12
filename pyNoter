@@ -8,86 +8,202 @@ from signal import SIGTERM, SIGINT, SIG_DFL, signal, sigwait
 
 from argparse import ArgumentParser
 
-from pynoter import Server
+from pynoter import Server, Client
 
 
-def signal_handler(signum, stack):
-    pass
+# Initialize logging.
+logger = logging.getLogger('pynoter')
+handler = StreamHandler()
+logger.addHandler(handler)
 
-if __name__ == "__main__":
-    # Initialize logging.
-    logger = logging.getLogger('pynoter')
-    handler = StreamHandler()
-    logger.addHandler(handler)
 
-    # Command line argument parsing.
-    commands = ArgumentParser(description="Advanced Notification Daemon")
+class Mode:
 
-    # Debugging output.
-    commands.add_argument("--debug", "-D", action="store_true", default=False,
-            dest="debug", help="Show debug information.")
+    @staticmethod
+    def add_options(command_parser):
+        command_parser.add_argument("-d", "--debug", action="store_true",
+                default=False, dest="debug", help="Show debug information.")
 
-    commands.add_argument("--systemd", "-s", action="store_true", default=False,
-            dest="systemd", help="Output information as if this program is " +
-            "running as systemd service.")
+        command_parser.add_argument("-s", "--system", action="store_true",
+                default=False, dest="system",
+                help="Use system bus instead of session bus.")
 
-    # Use system bus instead of session bus.
-    commands.add_argument("--system", "-S", action="store_true", default=False,
-            dest="system", help="Use system bus instead of session bus.")
+        command_parser.add_argument("-b", "--bus_suffix", metavar="SUFFIX",
+                action="store", default=None, dest="bus_suffix",
+                help="The suffix which should be added to the server's " +
+                "bus name.")
 
-    # Use a special bus suffix for the server.
-    commands.add_argument("--bus_suffix", "-B", action="store", default=None,
-            dest="bus_suffix", help="The suffix which should be added to the" +
-            " servers bus name.")
+    def __init__(self, arguments):
+        self._debug = arguments.debug
+        self._use_system = arguments.system
+        self._bus_suffix = arguments.bus_suffix
 
-    # Parse arguments
-    parsed_args = commands.parse_args()
-    debug = parsed_args.debug
-    systemd = parsed_args.systemd
-    use_system = parsed_args.system
-    bus_suffix = parsed_args.bus_suffix
-
-    # Set options accordingly.
-    if debug:
-        logger.setLevel(logging.DEBUG)
-        if systemd:
-            formatter = Formatter(
-                    fmt="%(name)s:%(lineno)d -- %(levelname)s: %(message)s")
-        else:
+        # Set options accordingly.
+        if self._debug:
+            logger.setLevel(logging.DEBUG)
             formatter = Formatter(
                     fmt="%(asctime)s - %(name)s:%(lineno)d -- %(levelname)s:" +
                     " %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S")
-    else:
-        logger.setLevel(logging.WARNING)
-        if systemd:
-            formatter = Formatter(fmt="%(message)s")
+                    datefmt="%Y-%m-%d %H:%M:%S")
         else:
+            logger.setLevel(logging.WARNING)
             formatter = Formatter(
                     fmt="%(asctime)s -- %(message)s",
                     datefmt="%Y-%m-%d %H:%M:%S")
 
-    handler.setFormatter(formatter)
+        handler.setFormatter(formatter)
 
-    # Start the server.
-    print("Start server now...")
 
-    try:
-        server = Server(bus_suffix=bus_suffix, use_system_bus=use_system)
-        server.start()
+class PynoterServer(Mode):
 
-        # Use a custom signal handler for SIGTERM so that we don't get
-        # terminated directly but can shutdown properly.
-        signal(SIGTERM, signal_handler)
+    @staticmethod
+    def add_options(command_parser):
+        # Add the general options to the parser.
+        Mode.add_options(command_parser)
 
-        # Wait until we receive a signal.
-        sigwait([SIGTERM, SIGINT])
+        command_parser.add_argument("--systemd", action="store_true",
+                default=False, dest="systemd", help="Output " +
+                "information as if this program is running as systemd " +
+                "service.")
 
-        # Reset the signal handler for SIGTERM.
-        signal(SIGTERM, SIG_DFL)
+        command_parser.set_defaults(execution_mode=PynoterServer.create_and_run)
 
-        server.stop()
-    except Exception as e:
-        print(e)
+    @staticmethod
+    def create_and_run(arguments):
+        server = PynoterServer(arguments)
+        server.run()
 
-        sys.exit(1)
+    def __init__(self, arguments):
+        super(PynoterServer, self).__init__(arguments)
+
+        # Parse and interpret own arguments.
+        self._systemd = arguments.systemd
+
+        if self._systemd:
+            # systemd flag is set so update the formatter.
+            if self._debug:
+                formatter = Formatter(
+                        fmt="%(name)s:%(lineno)d -- %(levelname)s: %(message)s")
+            else:
+                formatter = Formatter(fmt="%(message)s")
+
+            handler.setFormatter(formatter)
+
+    def run(self):
+        def signal_handler(signum, stack):
+            pass
+
+        # Start the server.
+        logger.info("Start server now.")
+
+        try:
+            server = Server(bus_suffix=self._bus_suffix,
+                    use_system_bus=self._use_system)
+
+            server.start()
+
+            # Use a custom signal handler for SIGTERM so that we don't get
+            # terminated directly but can shutdown properly.
+            signal(SIGTERM, signal_handler)
+
+            # Wait until we receive a signal.
+            sigwait([SIGTERM, SIGINT])
+
+            # Reset the signal handler for SIGTERM.
+            signal(SIGTERM, SIG_DFL)
+
+            server.stop()
+        except Exception as e:
+            logger.error(e)
+
+            sys.exit(1)
+
+
+class PynoterClient(Mode):
+
+    @staticmethod
+    def add_options(command_parser):
+        # Add the general options to the parser.
+        Mode.add_options(command_parser)
+
+        command_parser.add_argument("name", action="store",
+                help="The clients name.")
+
+        command_parser.add_argument("subject", action="store",
+                help="The subject of the message.")
+
+        command_parser.add_argument("body", action="store", nargs='?',
+                default="", help="The body of the message.")
+
+        command_parser.add_argument("icon", action="store", nargs='?',
+                default="", help="The icon of the message")
+
+        command_parser.add_argument("timeout", action="store", nargs='?',
+                type=int, default=6000, help="The timeout of the message (ms)")
+
+        command_parser.add_argument("--append", action="store_true",
+                default=False, dest="append",
+                help="Set append flag for the message.")
+
+        command_parser.add_argument("--update", action="store_true",
+                default=False, dest="update",
+                help="Set update flag for the message.")
+
+        command_parser.add_argument("--linger", action="store_true",
+                default=False, dest="linger",
+                help="Enable lingering for the client.")
+
+        command_parser.add_argument("--multi", action="store_true",
+                default=False, dest="multi",
+                help="Enable multi client for the client.")
+
+        command_parser.set_defaults(execution_mode=PynoterClient.create_and_run)
+
+    @staticmethod
+    def create_and_run(arguments):
+        client = PynoterClient(arguments)
+        client.run()
+
+    def __init__(self, arguments):
+        super(PynoterClient, self).__init__(arguments)
+
+        # Parse and interpret own arguments.
+        self._name = arguments.name
+        self._subject = arguments.subject
+        self._body = arguments.body
+        self._icon = arguments.icon
+        self._timeout = arguments.timeout
+        self._append = arguments.append
+        self._update = arguments.update
+        self._linger = arguments.linger
+        self._multi_client = arguments.multi
+
+    def run(self):
+        logger.info("Start the client.")
+
+        # Create the client
+        client = Client(self._name, server_bus_suffix=self._bus_suffix,
+                multi_client=self._multi_client, lingering=self._linger,
+                use_system_bus=self._use_system)
+
+        # Display the message
+        client.display_message(self._subject, self._body, icon=self._icon,
+                timeout=self._timeout, append=self._append,
+                update=self._update, reference=None)
+
+
+if __name__ == "__main__":
+    # Command line argument parsing.
+    commands = ArgumentParser(description="Advanced Notification Service")
+
+    # Additional options for the various execution modes.
+    modes = commands.add_subparsers(title="Modes", dest="mode")
+    PynoterServer.add_options(modes.add_parser("server"))
+    PynoterClient.add_options(modes.add_parser("client"))
+
+    # Parse arguments
+    parsed_args = commands.parse_args()
+    execution_mode = parsed_args.execution_mode
+
+    # Run either the client or the server.
+    execution_mode(parsed_args)
