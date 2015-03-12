@@ -118,6 +118,7 @@ class Message:
 
         self._closed_lock = RLock()
         self._closed_waiters = Condition(self._closed_lock)
+        self._closed_listeners = []
         self._closed_reason = None
 
         self._callback_id = -1
@@ -144,7 +145,14 @@ class Message:
             # Notify those which wait for the notification to close.
             self._closed_waiters.notify_all()
 
+            # Copy and reset the list of listeners. As we can not call them
+            # back while holding the lock.
+            listeners = self._closed_listeners[:]
 
+
+        # Notify those which registered a callback.
+        for listener in listeners:
+            listener(self, self._closed_reason == Message.ClosedReason.Vanished)
 
         # Disconnect from the signal.
         notification.disconnect(self._callback_id)
@@ -212,7 +220,25 @@ class Message:
 
         return True
 
-    def wait_for_close(self):
+    def notify_if_closed(self, callback):
+        """
+        Register a callback which is called if the notification for this
+        message gets closed.
+
+        :param callback: The function which should be used to call back.
+                         This function will get a boolean as argument.
+        :type callback: callable
+        """
+        with self._closed_lock:
+            if self._closed_reason is None:
+                # The message did not get closed yet. Register the callback.
+                self._closed_listeners.append(callback)
+                return
+
+        # The message already is closed. So directly call the callback.
+        callback(self, self._closed_reason == Message.ClosedReason.Vanished)
+
+    def wait_for_closed(self):
         """
         Wait until the notification for this message gets closed.
 
