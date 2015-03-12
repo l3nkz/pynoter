@@ -14,7 +14,7 @@
 from gi.repository.Notify import Notification
 from gi.repository.GLib import Variant
 
-from threading import Condition
+from threading import Condition, RLock
 
 from enum import IntEnum
 
@@ -116,10 +116,11 @@ class Message:
         self._reference = reference
         self._client_handler = client_handler
 
-        self._closed_callback_id = -1
-
-        self._closed_condition = Condition()
+        self._closed_lock = RLock()
+        self._closed_waiters = Condition(self._closed_lock)
         self._closed_reason = None
+
+        self._callback_id = -1
 
     def _closed_callback(self, notification):
         """
@@ -132,18 +133,22 @@ class Message:
         :param notification: The closed notification instance.
         :type notification: Notification
         """
-        self._closed_reason = Message.ClosedReason.get(
-                notification.get_closed_reason())
+        with self._closed_lock:
+            # Set the close reason.
+            self._closed_reason = Message.ClosedReason.get(
+                    notification.get_closed_reason())
 
-        logger.debug("Notification closed with {}".format(
-            self._closed_reason.name))
+            logger.debug("Notification closed with {}".format(
+                self._closed_reason.name))
 
-        with self._closed_condition:
-            # Notify all waiting threads that the notification got closed.
-            self._closed_condition.notify_all()
+            # Notify those which wait for the notification to close.
+            self._closed_waiters.notify_all()
 
-        notification.disconnect(self._closed_callback_id)
-        self._closed_callback_id = -1
+
+
+        # Disconnect from the signal.
+        notification.disconnect(self._callback_id)
+        self._callback_id = -1
 
     def display(self, use_flags = True):
         """
@@ -189,7 +194,7 @@ class Message:
 
         # Register for the close event of the notification.
         self._closed_reason = None
-        self._closed_callback_id = \
+        self._callback_id = \
                 self._client_handler.notification.connect("closed",
                         self._closed_callback)
 
@@ -218,10 +223,12 @@ class Message:
         :return: True if the notification vanished, False if it got closed
                  differently.
         """
-        if self._closed_reason is None:
-            with self._closed_condition:
-                self._closed_condition.wait(self._timeout/1000)
+        with self._closed_lock:
+            if self._closed_reason is None:
+                # The message did not get closed yet. Wait for it.
+                self._closed_waiters.wait(self._timeout/1000)
 
+        # The message already is closed, or the timeout hit.
         return self._closed_reason == Message.ClosedReason.Vanished
 
     @property
