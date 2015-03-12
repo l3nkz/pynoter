@@ -121,6 +121,26 @@ class ClientHandler(Object):
         # Register at the server, as the setup is done.
         self._server.add_client_handler(self)
 
+    def _message_callback(self, message, vanished):
+        """
+        Callback which is called by the message object if it is closed.
+
+        This callback is primarily used to tier down the handler if all clients
+        unregistered and the last message was closed.
+
+        :param message: The message object which got closed.
+        :type message: Message
+        :param vanished: Flag which indicates that the message vanished and did
+                         not got closed differently.
+        :type vanished: bool
+        """
+        if self._lingering and len(self._clients) == 0:
+            if message.id == self._last_message:
+                # The message which just was closed was the last message which
+                # issued by this handler. Hence, it is save to remove the
+                # handler now.
+                self._remove_from_server()
+
     def _remove_from_server(self):
         """
         Remove this handler from the current pynoter server and from DBus.
@@ -238,6 +258,8 @@ class ClientHandler(Object):
         message = Message(self._notification, subject, body, icon, timeout,
                 append, update, reference)
         self._last_message = message.id
+
+        message.notify_if_closed(self._message_callback)
 
         self._message_handler.enqueue(self, message)
 
