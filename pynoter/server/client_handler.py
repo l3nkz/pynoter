@@ -58,8 +58,8 @@ class ClientHandler(Object):
         return str(uuid4()).replace('-', '_')
 
 
-    def __init__(self, program_name, multi_client, message_handler, bus_name,
-            server):
+    def __init__(self, program_name, multi_client, lingering,
+            message_handler, bus_name, server):
         """
         Constructor of the class. Here the DBus connection will be set up
         as well as other maintenance operations.
@@ -67,10 +67,14 @@ class ClientHandler(Object):
         :param program_name: The name of the program for which this handler
                              should handle clients.
         :type program_name: str
-        :param multi_client: Flag which indicates whether or not this handler
-                             should serve multiple clients of the given
-                             program.
+        :param multi_client: Flag which indicates if there will be more clients
+                             registering for the same client_name, which should
+                             be treated as one client.
         :type multi_client: bool
+        :param lingering: Flag which indicates, that the handler for this
+                          client should stay alive even if the current client
+                          vanishes.
+        :type lingering: bool
         :param message_handler: The message handler thread, which handles the
                                 displaying of the notifications of the clients.
         :type message_handler: MessageHandler
@@ -105,7 +109,7 @@ class ClientHandler(Object):
 
         self._clients = []
         self._multi_client = multi_client
-        self._lingering = False
+        self._lingering = lingering
         self._last_message = ""
 
         self._add_to_server()
@@ -289,25 +293,31 @@ class ClientHandler(Object):
 
     # Normal Interface
 
-    def can_handle(self, program_name, multi_client):
+    def can_handle(self, program_name, multi_client, lingering):
         """
         Check whether this handler can handle a client for the given program.
 
         :param program_name: The name of the program for which a client wants
                              to be handled.
         :type program_name: str
-        :param multi_client: Whether or not the this handler should be able
-                             to serve multiple clients.
+        :param multi_client: Flag which indicates if there will be more clients
+                             registering for the same client_name, which should
+                             be treated as one client.
         :type multi_client: bool
+        :param lingering: Flag which indicates, that the handler for this
+                          client should stay alive even if the current client
+                          vanishes.
+        :type lingering: bool
         :rtype: bool
         :return: Whether or not this handler can handle the client.
         """
         if program_name == self._program_name and \
-                multi_client == self._multi_client:
+                multi_client == self._multi_client and \
+                lingering == self._lingering:
             if len(self._clients) == 0 and self._lingering:
                 return True
 
-            if self._multi_client:
+            if len(self._clients) != 0 and self._multi_client:
                 return True
 
         return False
@@ -321,26 +331,6 @@ class ClientHandler(Object):
         :return: The unique name of this handler.
         """
         return self._id
-
-    @property
-    def is_multi_client(self):
-        """
-        Check whether or not this handler can serve multiple clients.
-
-        :rtype: bool
-        :return: Whether this handler can serve multiple clients.
-        """
-        return self._multi_client
-
-    @property
-    def is_lingering(self):
-        """
-        Check whether or not this handler supports lingering for its clients.
-
-        :rtype: bool
-        :return: Whether this handler supports lingering for clients.
-        """
-        return self._lingering
 
     @property
     def notification(self):

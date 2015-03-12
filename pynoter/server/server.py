@@ -103,29 +103,33 @@ class Server(Object, Thread):
 
     # DBus Interface
 
-    @method(dbus_interface='org.pynoter.server', in_signature='sb',
+    @method(dbus_interface='org.pynoter.server', in_signature='sbb',
             out_signature='s')
-    def get_handler(self, program_name, multi_client = False):
+    def get_handler(self, program_name, multi_client, lingering):
         """
         Get the address of a handler for the given program.
 
         :param program_name: The name of the program for which a client wants
                              to know the handler.
         :type program_name: str
-        :param multi_client: Flag which indicates whether or not the handler
-                             should serve multiple clients from the same
-                             program.
+        :param multi_client: Flag which indicates if there will be more clients
+                             registering for the same client_name, which should
+                             be treated as one client.
         :type multi_client: bool
+        :param lingering: Flag which indicates, that the handler for this
+                          client should stay alive even if the current client
+                          vanishes.
+        :type lingering: bool
         :rtype: str
         :return: The address of the handler for this particular program.
         """
         # Check if a handler already exists.
         for handler in self._client_handlers:
-            if handler.can_handle(program_name, multi_client):
+            if handler.can_handle(program_name, multi_client, lingering):
                 return handler.path
 
         # No handler found, so create a new one.
-        handler = ClientHandler(program_name, multi_client,
+        handler = ClientHandler(program_name, multi_client, lingering,
                 self._message_handler, self._bus_name, self)
 
         return handler.path

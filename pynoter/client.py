@@ -110,7 +110,8 @@ class Client:
         )
 
         # Get the handler for this client.
-        handler_path = server.get_handler(program_name, multi_client)
+        handler_path = server.get_handler(program_name, multi_client,
+                lingering)
         handler = Interface(
                 self._dbus_bus.get_object(server_bus, handler_path),
                 dbus_interface='org.pynoter.client_handler'
@@ -119,14 +120,6 @@ class Client:
         # Register at the handler.
         self._id = handler.register()
         self._handler = handler
-
-        # Enable lingering and multi client support at the handler if wanted
-        # by the user.
-        if lingering:
-            handler.enable_lingering(self._id)
-
-        if multi_client:
-            handler.enable_multi_client(self._id)
 
     def _unregister(self):
         """
