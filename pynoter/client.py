@@ -96,7 +96,6 @@ class Client:
                           client should stay alive even if the current client
                           vanishes.
         :type lingering: bool
-
         """
         if server_bus_suffix is None:
             server_bus = 'org.pynoter'
