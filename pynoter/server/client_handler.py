@@ -11,7 +11,7 @@
 # (c) Till Smejkal - till.smejkal+pynoter@ossmail.de
 ###############################################################################
 
-from dbus.service import Object, BusName, method
+from dbus.service import Object, BusName, method, signal
 
 import gi.repository.Notify as notify
 from gi.repository.Notify import Notification
@@ -264,6 +264,16 @@ class ClientHandler(Object):
         self._message_handler.enqueue(self, message)
 
         return message.id
+
+    @signal(dbus_interface='org.pynoter.client_handler', signature='s')
+    def message_closed(self, message_id):
+        """
+        Emit the message closed signal.
+
+        :param message_id: The identifier of the message which just got closed.
+        :type message_id: str
+        """
+        logger.debug("Emit 'message_closed' for {}.".format(message_id))
 
     @method(dbus_interface='org.pynoter.client_handler', out_signature='s')
     def register(self):
