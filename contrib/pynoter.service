@@ -1,0 +1,10 @@
+[Unit]
+Description=pynoter server
+
+[Service]
+Type=dbus
+BusName=org.pynoter
+ExecStart=/usr/bin/pyNoter server --systemd
+
+[Install]
+WantedBy=default.target
