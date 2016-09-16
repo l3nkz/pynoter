@@ -148,7 +148,7 @@ class Message:
             # Copy and reset the list of listeners. As we can not call them
             # back while holding the lock.
             listeners = self._closed_listeners[:]
-
+            self._closed_listeners = []
 
         # Notify those which registered a callback.
         for listener in listeners:

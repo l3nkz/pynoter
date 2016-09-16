@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 ###############################################################################
-# pynoted -- client handler
+# pynoter -- client handler
 #
 # The client handler of the pynoter package. This class was designed to
 # handle the requests of clients for displaying messages.
@@ -12,6 +12,9 @@
 ###############################################################################
 
 from dbus.service import Object, BusName, method, signal
+
+import gi
+gi.require_version('Notify', '0.7')
 
 import gi.repository.Notify as notify
 from gi.repository.Notify import Notification

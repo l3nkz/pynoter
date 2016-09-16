@@ -139,7 +139,7 @@ def revises(item1, item2):
     if item1.message.appends:
         # If the item performs an append, the reference id and the subjects of
         # the two messages are important as the notification library only
-        # append one message to another if they have the same subject.
+        # appends one message to another if they have the same subject.
         return item1.ref_id == item2.id and \
                 item1.message.subject == item2.message.subject
 
@@ -206,7 +206,7 @@ class Queue:
                                         #  the producer consumer pattern without
                                         #  busy waiting.
 
-        self._lock = Lock()            #< The lock to protect the internal list.
+        self._lock = Lock()             #< The lock to protect the internal list.
 
     def __iter__(self):
         """
@@ -270,7 +270,7 @@ class MessageHandler(Thread):
         Constructor of the class. Here the thread will be initialized as well
         as all used locks and other synchronization variables.
         """
-        logger.debug("Create a new  message handler")
+        logger.debug("Create a new message handler")
 
         # Call the super constructor to properly setup the thread.
         super(MessageHandler, self).__init__()
@@ -299,7 +299,7 @@ class MessageHandler(Thread):
 
     def _show_without_closure(self, item, use_flags = True):
         """
-        Display the given notification message together without all the other
+        Display the given notification message without all the other
         messages part of its closure.
 
         :param item: The message queue item which should be displayed.
